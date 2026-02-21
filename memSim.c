@@ -40,6 +40,7 @@ static int *frame_to_page; // frame -> page
 void parse_arguments(int argc, char *argv[]);
 void print_output(int addr_cnt, int page_fault_cnt, int tlb_hit_cnt, int tlb_miss_cnt);
 int in_tlb(unsigned int page);
+int pick_victim(void);
 
 
 // parse arguments and set global variables
@@ -110,7 +111,22 @@ int in_tlb(unsigned int page){ // returns idx in tlb, -1 if not present
     return -1;
 }
 
+// Choose a victim frame based on algorithm, return index of frame to replace
+int pick_victim(void) {
+    switch (algorithm)
+    {
+    case FIFO:
+        /* code */
+        break;
 
+    case LRU:
+        break;
+
+    case OPT:
+        break;
+    }
+    return 0;
+}
 // usage: ./memSim <reference-sequence-file.txt> <FRAMES> <PRA>
 // reference-sequence-file.txt: a text file containing list of logical memory addresses (integers)
 // FRAMES: number of frames in the memory FRAMES (integer <= 256 and > 0)
@@ -142,7 +158,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    FILE *backing_store = fopen("BACKING_STORE.bin", "r");
+    FILE *backing_store = fopen("BACKING_STORE.bin", "rb");
     if (!backing_store) {
         perror("Error opening backing store");
         exit(EXIT_FAILURE);
@@ -158,8 +174,12 @@ int main(int argc, char *argv[]) {
 
     int tlb_idx = 0; // tlb FIFO index, increment when used, then %= 16
 
-    char *line = NULL;
     const size_t line_len = 4; // 32 bits -> 4 bytes
+    char line[line_len];
+
+    int last_used[num_frames]; //LRU data
+
+    int time = 0; // put in last_used to keep track of time when frame accessed, increments each iteration of while loop
 
     while(fgets(line, line_len, input_file)) {
         addr_cnt++;
@@ -172,7 +192,7 @@ int main(int argc, char *argv[]) {
         unsigned int frame;
         int tlb_entry = in_tlb(page);
 
-        if (tlb_entry > 0) { // TLB hit
+        if (tlb_entry >= 0) { // TLB hit
             frame = tlb[tlb_entry].frame_number;
             tlb_hit_cnt++;
         }
@@ -180,12 +200,14 @@ int main(int argc, char *argv[]) {
         else { // TLB miss
             tlb_miss_cnt++;
             //check if in page table
-            PageTableEntry page_entry = page_table[page];
-            if (page_entry.present) { //page hit
-                frame = page_entry.frame_number;
-            } 
+            PageTableEntry *page_entry = &page_table[page];
+
+            if (page_entry->present) //page hit
+                frame = page_entry->frame_number;
+
             else { // page fault, load from backing store
                 page_fault_cnt++;
+
                 if (empty_frames > 0) { // once all are full, can never have empty frames
                     frame = num_frames - empty_frames;
                     long file_offset = (long)page * 256;
@@ -196,24 +218,16 @@ int main(int argc, char *argv[]) {
                         perror("Error reading from backing store");
                         exit(1);
                     }
+                    frame_to_page[frame] = page; // used so we can invalidate the page if we evict its frame
                     empty_frames--;
                 }
+
                 else { //replacement time
-                    switch (algorithm)
-                    {
-                    case FIFO:
-                        /* code */
-                        break;
-
-                    case LRU:
-
-                    case OPT:
-                    default:
-                        break;
-                    }
+                    // TODO: mark old page as not present, replace frame, and update frame_to_page
+                    int victim = pick_victim();
                 }
-                page_entry.present = 1;
-                page_entry.frame_number = frame;
+                page_entry->present = 1;
+                page_entry->frame_number = frame;
             }
 
             tlb[tlb_idx].page_number = page; // replace in TLB using FIFO
@@ -236,6 +250,7 @@ int main(int argc, char *argv[]) {
         }        
         printf("\n");
 
+        time++;
     }
 
     print_output(addr_cnt, page_fault_cnt, tlb_hit_cnt, tlb_miss_cnt);
