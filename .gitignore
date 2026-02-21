@@ -1,0 +1,4 @@
+*.bin
+*.txt
+memSim
+memSim.o
