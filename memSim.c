@@ -35,16 +35,31 @@ static TLBEntry tlb[TLB_SIZE];
 static PageTableEntry page_table[PAGE_TABLE_SIZE]; // page -> frame
 static unsigned char *physical_mem = NULL;
 static int *frame_to_page; // frame -> page
+static int *fifo_queue = NULL;
+static int  fifo_head = 0;
+static int  fifo_tail = 0;
 
 // Function prototypes
-void parse_arguments(int argc, char *argv[]);
-void print_output(int addr_cnt, int page_fault_cnt, int tlb_hit_cnt, int tlb_miss_cnt);
+static void parse_arguments(int argc, char *argv[]);
+static void print_output(int addr_cnt, int page_fault_cnt, int tlb_hit_cnt, int tlb_miss_cnt);
 int in_tlb(unsigned int page);
-int pick_victim(void);
+int pick_victim(int *last_used);
 
+static void fifo_push(int frame)
+{
+    fifo_queue[fifo_tail] = frame;
+    fifo_tail = (fifo_tail + 1) % num_frames;
+}
+
+static int fifo_pop(void)
+{
+    int head_frame = fifo_queue[fifo_head];
+    fifo_head = (fifo_head + 1) % num_frames;
+    return head_frame;
+}
 
 // parse arguments and set global variables
-void parse_arguments(int argc, char *argv[]) {
+static void parse_arguments(int argc, char *argv[]) {
     if ( argc != 2 && argc != 4) { // can be default 256 frames and FIFO 
         fprintf(stderr, "Usage: %s <input_file> <FRAMES> <PRA>\n", argv[0]);
         exit(EXIT_FAILURE);
@@ -90,7 +105,7 @@ For every address in the given addresses file, print one line of comma-separated
 Total number of page faults and a % page fault rate
 Total number of TLB hits, misses and % TLB hit rate
 */
-void print_output(int addr_cnt, int page_fault_cnt, int tlb_hit_cnt, int tlb_miss_cnt) {
+static void print_output(int addr_cnt, int page_fault_cnt, int tlb_hit_cnt, int tlb_miss_cnt) {
     double tlb_hit_rate = 0.0;
     if ((tlb_hit_cnt + tlb_miss_cnt) > 0) {
         tlb_hit_rate = (double)tlb_hit_cnt / (tlb_hit_cnt + tlb_miss_cnt);
@@ -112,17 +127,28 @@ int in_tlb(unsigned int page){ // returns idx in tlb, -1 if not present
 }
 
 // Choose a victim frame based on algorithm, return index of frame to replace
-int pick_victim(void) {
+int pick_victim(int *last_used) {
     switch (algorithm)
     {
-    case FIFO:
-        /* code */
-        break;
+    case FIFO: {
+        int victim_frame = fifo_pop();
+        return victim_frame;
+    }
 
-    case LRU:
-        break;
+    case LRU: {
+        int lru_frame = 0;
+        int lru_time = __INT_MAX__; // initialize to max int so any real time will be smaller
+        for (int i = 0; i < num_frames; i++) {
+            if (last_used[i] < lru_time) {
+                lru_time = last_used[i];
+                lru_frame = i;
+            }
+        }
+        return lru_frame;
+    }
 
     case OPT:
+
         break;
     }
     return 0;
@@ -177,7 +203,10 @@ int main(int argc, char *argv[]) {
     const size_t line_len = 4; // 32 bits -> 4 bytes
     char line[line_len];
 
-    int last_used[num_frames]; //LRU data
+    int last_used[num_frames];
+    for (int i = 0; i < num_frames; i++){
+        last_used[i] = 0;
+    }
 
     int time = 0; // put in last_used to keep track of time when frame accessed, increments each iteration of while loop
 
@@ -224,11 +253,28 @@ int main(int argc, char *argv[]) {
 
                 else { //replacement time
                     // TODO: mark old page as not present, replace frame, and update frame_to_page
-                    int victim = pick_victim();
+                    int victim_frame = pick_victim(last_used);
+                    int victim_page = frame_to_page[victim_frame];
+                    page_table[victim_page].present = 0; // invalidate old page
+
+                    long file_offset = (long)page * 256;
+                    long mem_offset  = (long)victim_frame * 256;
+                    fseek(backing_store, file_offset, SEEK_SET);
+                    size_t n = fread(physical_mem + mem_offset, 1, 256, backing_store);
+                    if (n != FRAME_SIZE) {
+                        perror("Error reading from backing store");
+                        exit(1);
+                    }
+
+                    frame_to_page[victim_frame] = page; // update frame to page mapping
+                    frame = victim_frame;
                 }
                 page_entry->present = 1;
                 page_entry->frame_number = frame;
+                fifo_push(frame); // add new frame to FIFO queue if page fault occurs
             }
+
+            last_used[frame] = time;    // update last used for LRU
 
             tlb[tlb_idx].page_number = page; // replace in TLB using FIFO
             tlb[tlb_idx].valid = 1;
