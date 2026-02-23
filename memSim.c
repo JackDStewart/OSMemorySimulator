@@ -360,14 +360,15 @@ int main(int argc, char *argv[]) {
                     fifo_push(frame); // add new frame to FIFO queue if page fault occurs
             }
 
-            last_used[frame] = time;    // update last used for LRU
-
+            
             tlb[tlb_idx].page_number = page; // replace in TLB using FIFO
             tlb[tlb_idx].valid = 1;
             tlb[tlb_idx].frame_number = frame;
-
+            
             tlb_idx = (tlb_idx + 1) % 16; // increment and rotate back when full
         }
+        // update last used for LRU
+        last_used[frame] = time; 
         
         //compute physical addr
         int phys_addr = frame * FRAME_SIZE;
@@ -378,7 +379,7 @@ int main(int argc, char *argv[]) {
         printf("%s, %d, %u, ", line, value, frame);
         // print entire frame
         for (int i = 0; i < FRAME_SIZE; i++) {
-            printf("%02x", frame_data[i]);
+            printf("%02X", frame_data[i]);
         }        
         printf("\n");
 

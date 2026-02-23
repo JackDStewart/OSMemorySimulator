@@ -1,3 +1,5 @@
 # OSMemorySimulator
 
 Jack Stewart and Owen Marcione
+
+For tiebrakers in the OPT frame replacement algorithm we will use the lowest number frame available if the page for that frame is never seen again in the future. For example in the OPT 1 test case, after the memory is full from the first 5 pages, we will continuously replace frame 0 since no curent valid pages will be revisited in the future.
