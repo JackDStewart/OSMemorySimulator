@@ -8,7 +8,7 @@
 #define PAGE_SIZE 256   // Size of a page in bytes
 #define PAGE_TABLE_SIZE 256 // Number of entries in the page table
 #define FRAME_SIZE 256
-#define TLB_SIZE 16     // Number of entries in the TLB
+#define TLB_SIZE 16    // Number of entries in the TLB
 
 
 typedef enum {
@@ -122,7 +122,7 @@ static void print_output(int addr_cnt, int page_fault_cnt, int tlb_hit_cnt, int 
     printf("Page Fault Rate = %.3f\n", (double)page_fault_cnt / addr_cnt);
     printf("TLB Hits = %d\n", tlb_hit_cnt);
     printf("TLB Misses = %d\n", tlb_miss_cnt);
-    printf("TLB Hit Rate = %.3f\n", tlb_hit_rate * 100);
+    printf("TLB Hit Rate = %.3f\n", tlb_hit_rate);
 }
 
 int in_tlb(unsigned int page){ // returns idx in tlb, -1 if not present
@@ -158,7 +158,7 @@ int pick_victim(int *last_used) {
         int victim_frame = 0;
         int victim_idx = -1; // anything else will be larger
         for (int i = 0; i < num_frames; i++) { // for each current frame
-            int p =  frame_to_page[i];
+            int p = frame_to_page[i];
             int j = time;
             int found = 0;
             // scan all future frames, find which of current frames is farthest 
